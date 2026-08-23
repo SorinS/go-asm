@@ -45,7 +45,7 @@ windows-amd64.
 :GoAsmInstall [tag] Download the go-asm server for this platform. With no
                     argument, installs the version this plugin expects (see
                     |go-asm-versioning|). Pass "latest" for the newest
-                    release, or a tag like "v0.2.0" for a specific one. Safe
+                    release, or a tag like "v0.1.0" for a specific one. Safe
                     to re-run; it overwrites the existing binary.
 
                                                                  *:GoAsmInfo*
