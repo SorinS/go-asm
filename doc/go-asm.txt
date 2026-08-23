@@ -1,0 +1,119 @@
+*go-asm.txt*  Assembly language server with live emulation and debugging
+
+                                                                     *go-asm*
+go-asm.nvim ~
+
+A Neovim client for the go-asm language server: it assembles NASM/Intel-syntax
+assembly live, runs it in an emulator, and shows register state inline.
+Targets x86-64, 32-bit x86 (BITS 32) and RISC-V, auto-detected per buffer.
+
+Requires Neovim 0.11+ and, for |:GoAsmInstall|, curl.
+
+==============================================================================
+CONTENTS                                                    *go-asm-contents*
+
+    1. Install ................................. |go-asm-install|
+    2. Commands ................................ |go-asm-commands|
+    3. Mappings ................................ |go-asm-mappings|
+    4. Configuration ........................... |go-asm-config|
+    5. Troubleshooting ......................... |go-asm-troubleshooting|
+
+==============================================================================
+1. INSTALL                                                   *go-asm-install*
+
+With lazy.nvim: >lua
+
+    {
+      "SorinS/go-asm",
+      ft = { "asm", "nasm" },
+      build = ":GoAsmInstall",
+      config = function() require("go_asm") end,
+    }
+<
+The server is a prebuilt binary published on GitHub Releases. |:GoAsmInstall|
+downloads the build for your platform into `stdpath("data")/go-asm/bin` — no
+sudo, no PATH changes, no Go toolchain.
+
+Builds exist for darwin-arm64, darwin-amd64, linux-amd64, linux-arm64 and
+windows-amd64.
+
+==============================================================================
+2. COMMANDS                                                 *go-asm-commands*
+
+                                                              *:GoAsmInstall*
+:GoAsmInstall       Download the go-asm server for this platform. Safe to
+                    re-run; it overwrites the existing binary.
+
+                                                                 *:GoAsmInfo*
+:GoAsmInfo          Show the resolved binary path, the detected platform and
+                    the release repo.
+
+                    See also `:checkhealth go_asm`.
+
+==============================================================================
+3. MAPPINGS                                                 *go-asm-mappings*
+
+Set on the buffer when the server attaches; nothing is bound globally.
+
+Run: ~
+    <leader>rr      Run the buffer.
+    <leader>rc      Run to the cursor line.
+    <leader>rg      Registers, in a float. Toggles.
+    <leader>rx      Toggle the inline overlay.
+    K               Hover: encoded bytes and operand forms.
+
+Debug: ~
+    <leader>rs      Step one instruction.
+    <leader>ro      Step over.
+    <leader>rS      Step back.
+    <leader>rR      Restart the session.
+    <leader>rn      Continue to the next breakpoint.
+    <leader>rq      Quit debugging and clear.
+    <leader>rb      Toggle a breakpoint.
+    <leader>rB      Conditional breakpoint; prompts for "<reg> <op> <value>",
+                    e.g. "rcx == 0". Repeat on the same line to remove.
+    <leader>rm      Memory dump; prompts for a register name or 0xADDR.
+
+Floats close on q, <Esc>, or cursor movement.
+
+==============================================================================
+4. CONFIGURATION                                              *go-asm-config*
+
+Nothing needs configuring for normal use. Two escape hatches, set before the
+server starts (before opening an .asm buffer): >lua
+
+    local go_asm = require("go_asm")
+    go_asm.cmd  = "/path/to/go-asm"   -- pin a specific binary
+    go_asm.repo = "you/your-fork"     -- install from a fork's releases
+<
+                                                          *go-asm-resolution*
+The binary is resolved in order: `go_asm.cmd`, PATH, `stdpath("data")`'s
+go-asm/bin, ~/.local/bin, ~/bin, ~/go/bin. The absolute fallbacks matter
+because a GUI-launched Neovim inherits no shell PATH.
+
+To rebind, map the module functions directly: >lua
+
+    vim.keymap.set("n", "<F5>", function() require("go_asm").run() end)
+<
+Available: run(), run_to_cursor(), registers(), clear(), dbg_step(),
+dbg_stepover(), dbg_stepback(), dbg_restart(), dbg_continue(), dbg_stop(),
+toggle_breakpoint(), cond_breakpoint(), memory(), install(), binary(),
+platform().
+
+==============================================================================
+5. TROUBLESHOOTING                                   *go-asm-troubleshooting*
+
+Nothing happens; no mappings exist ~
+    The mappings are created on LspAttach, so if the server did not start,
+    none of them exist. Run `:checkhealth go_asm`, then |:GoAsmInstall|.
+
+"server binary not found" ~
+    Run |:GoAsmInstall|. If you installed the binary manually, put it on PATH
+    or in one of the directories under |go-asm-resolution| — note that a
+    GUI-launched Neovim does not inherit your shell PATH.
+
+"no release build for <os>/<arch>" ~
+    No binary is published for that platform yet. Open an issue; meanwhile,
+    point `go_asm.cmd` at a server binary you already have.
+
+vim:tw=78:ts=8:noet:ft=help:norl:
