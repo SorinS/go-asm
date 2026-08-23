@@ -25,7 +25,7 @@ M.repo = "SorinS/go-asm"
 -- fetches exactly this by default: the client and server share custom methods
 -- (asm/run, asm/debug/*), so an arbitrary pairing is not safe. Pass "latest"
 -- or an explicit tag to override.
-M.version = "v0.3.0"
+M.version = "v0.4.0"
 
 -- install_dir is where :GoAsmInstall drops the binary — under nvim's data dir,
 -- so it survives plugin reinstalls and needs no privileges or PATH edits.
