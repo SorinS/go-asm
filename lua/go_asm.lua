@@ -21,6 +21,12 @@ local ns = vim.api.nvim_create_namespace("asm_live") -- run/debug overlay
 -- at a fork to install that fork's builds instead.
 M.repo = "SorinS/go-asm"
 
+-- version is the server release this client is built against. :GoAsmInstall
+-- fetches exactly this by default: the client and server share custom methods
+-- (asm/run, asm/debug/*), so an arbitrary pairing is not safe. Pass "latest"
+-- or an explicit tag to override.
+M.version = "v0.1.0"
+
 -- install_dir is where :GoAsmInstall drops the binary — under nvim's data dir,
 -- so it survives plugin reinstalls and needs no privileges or PATH edits.
 local function install_dir()
@@ -69,8 +75,22 @@ function M.binary()
   return nil
 end
 
+-- server_version runs the resolved binary's --version. Returns nil when the
+-- server is missing, predates the flag, or hangs (it would otherwise sit
+-- waiting on stdin for LSP traffic).
+function M.server_version()
+  local bin = M.binary()
+  if not bin then return nil end
+  local ok, res = pcall(function()
+    return vim.system({ bin, "--version" }, { text = true, stdin = false }):wait(2000)
+  end)
+  if not ok or res.code ~= 0 then return nil end
+  return (res.stdout or ""):match("go%-asm%s+(%S+)")
+end
+
 -- install downloads the release asset for this platform into install_dir.
--- `tag` defaults to the latest release. Safe to re-run; it overwrites.
+-- `tag` defaults to M.version; pass "latest" for the newest release. Safe to
+-- re-run; it overwrites.
 function M.install(tag)
   local plat = M.platform()
   if not plat then
@@ -84,12 +104,13 @@ function M.install(tag)
     return
   end
   local asset = asset_name(plat)
-  local url = tag
-      and ("https://github.com/%s/releases/download/%s/%s"):format(M.repo, tag, asset)
-      or ("https://github.com/%s/releases/latest/download/%s"):format(M.repo, asset)
+  tag = tag or M.version
+  local url = (tag == "latest")
+      and ("https://github.com/%s/releases/latest/download/%s"):format(M.repo, asset)
+      or ("https://github.com/%s/releases/download/%s/%s"):format(M.repo, tag, asset)
   local dest = vim.fs.joinpath(install_dir(), local_name())
   vim.fn.mkdir(install_dir(), "p")
-  vim.notify("go-asm: downloading " .. asset .. "…")
+  vim.notify(("go-asm: downloading %s (%s)…"):format(asset, tag))
   -- -f so an HTML 404 page is never written over the binary.
   vim.system({ "curl", "-fsSL", "--retry", "2", "-o", dest, url }, { text = true }, function(res)
     vim.schedule(function()
@@ -481,13 +502,16 @@ if not vim.g.go_asm_loaded then
     end,
   })
 
-  vim.api.nvim_create_user_command("GoAsmInstall", function() M.install() end,
-    { desc = "Download the go-asm server for this platform" })
+  vim.api.nvim_create_user_command("GoAsmInstall", function(o)
+    M.install(o.args ~= "" and o.args or nil)
+  end, { nargs = "?", desc = "Download the go-asm server ([tag] | latest)" })
   vim.api.nvim_create_user_command("GoAsmInfo", function()
     local bin = M.binary()
-    vim.notify(("go-asm: %s\nplatform: %s\nrepo: %s"):format(
-      bin or "NOT FOUND (run :GoAsmInstall)", M.platform() or "unsupported", M.repo))
-  end, { desc = "Show the resolved go-asm binary and platform" })
+    local have = M.server_version()
+    vim.notify(("go-asm: %s\nserver:   %s (expected %s)\nplatform: %s\nrepo:     %s"):format(
+      bin or "NOT FOUND (run :GoAsmInstall)", have or "unknown", M.version,
+      M.platform() or "unsupported", M.repo))
+  end, { desc = "Show the resolved go-asm binary, version and platform" })
 
   vim.api.nvim_create_autocmd("LspAttach", {
     callback = function(args)

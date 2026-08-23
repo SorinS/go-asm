@@ -89,9 +89,34 @@ A conditional breakpoint prompts for `<reg> <op> <value>`, e.g. `rcx == 0`.
 
 | Command | Description |
 |---|---|
-| `:GoAsmInstall` | Download the server for this platform |
-| `:GoAsmInfo` | Show the resolved binary, platform and source repo |
-| `:checkhealth go_asm` | Diagnose install problems |
+| `:GoAsmInstall` | Download the server version this plugin expects |
+| `:GoAsmInstall latest` | Download the newest release instead |
+| `:GoAsmInstall v0.2.0` | Download a specific release |
+| `:GoAsmInfo` | Show the resolved binary, its version and the platform |
+| `:checkhealth go_asm` | Diagnose install and version problems |
+
+## Versioning
+
+The plugin and the server are released together under one tag, and the plugin
+pins the server build it was written against:
+
+```lua
+require("go_asm").version  --> "v0.1.0"
+```
+
+`:GoAsmInstall` fetches exactly that. Client and server share custom LSP
+methods (`asm/run`, `asm/debug/*`), so an arbitrary pairing is not safe — a
+mismatch surfaces as requests that fail rather than as anything obviously
+version-related, which is why `:checkhealth go_asm` compares the two and warns.
+
+Update both together (your plugin manager, then `:GoAsmInstall`). To deliberately
+run a different server, `:GoAsmInstall latest` or `:GoAsmInstall <tag>`.
+
+The server reports its own build too:
+
+```sh
+go-asm --version    # go-asm v0.1.0 (abc1234)
+```
 
 ## Configuration
 
@@ -101,8 +126,9 @@ buffer):
 
 ```lua
 local go_asm = require("go_asm")
-go_asm.cmd  = "/path/to/go-asm"   -- use a specific binary (e.g. a local build)
-go_asm.repo = "you/your-fork"     -- install from a fork's releases
+go_asm.cmd     = "/path/to/go-asm"  -- use a specific binary (e.g. a local build)
+go_asm.repo    = "you/your-fork"    -- install from a fork's releases
+go_asm.version = "v0.2.0"           -- pin a different server release
 ```
 
 The binary is resolved in this order: `go_asm.cmd` → `PATH` →

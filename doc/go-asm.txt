@@ -16,6 +16,7 @@ CONTENTS                                                    *go-asm-contents*
     2. Commands ................................ |go-asm-commands|
     3. Mappings ................................ |go-asm-mappings|
     4. Configuration ........................... |go-asm-config|
+       Versioning .............................. |go-asm-versioning|
     5. Troubleshooting ......................... |go-asm-troubleshooting|
 
 ==============================================================================
@@ -41,12 +42,15 @@ windows-amd64.
 2. COMMANDS                                                 *go-asm-commands*
 
                                                               *:GoAsmInstall*
-:GoAsmInstall       Download the go-asm server for this platform. Safe to
-                    re-run; it overwrites the existing binary.
+:GoAsmInstall [tag] Download the go-asm server for this platform. With no
+                    argument, installs the version this plugin expects (see
+                    |go-asm-versioning|). Pass "latest" for the newest
+                    release, or a tag like "v0.2.0" for a specific one. Safe
+                    to re-run; it overwrites the existing binary.
 
                                                                  *:GoAsmInfo*
-:GoAsmInfo          Show the resolved binary path, the detected platform and
-                    the release repo.
+:GoAsmInfo          Show the resolved binary path, its version, the detected
+                    platform and the release repo.
 
                     See also `:checkhealth go_asm`.
 
@@ -86,6 +90,15 @@ server starts (before opening an .asm buffer): >lua
     go_asm.cmd  = "/path/to/go-asm"   -- pin a specific binary
     go_asm.repo = "you/your-fork"     -- install from a fork's releases
 <
+                                                          *go-asm-versioning*
+The plugin and server are released together under one tag, and the plugin pins
+the server build it was written against (`require("go_asm").version`).
+|:GoAsmInstall| fetches exactly that. The two share custom methods (asm/run,
+asm/debug/*), so a mismatched pair shows up as failing requests rather than as
+an obvious version error — `:checkhealth go_asm` compares them and warns.
+
+Update both together: your plugin manager, then |:GoAsmInstall|.
+
                                                           *go-asm-resolution*
 The binary is resolved in order: `go_asm.cmd`, PATH, `stdpath("data")`'s
 go-asm/bin, ~/.local/bin, ~/bin, ~/go/bin. The absolute fallbacks matter
