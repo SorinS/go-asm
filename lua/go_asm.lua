@@ -37,8 +37,20 @@ function M.platform()
   return os_name .. "-" .. arch
 end
 
-local function exe(path)
-  return path .. ((M.platform() or ""):match("^windows") and ".exe" or "")
+local function is_windows()
+  return (M.platform() or ""):match("^windows") ~= nil
+end
+
+-- asset_name is the release asset published for a platform. Windows keeps .exe
+-- so the download is runnable as-is; everywhere else the asset is .bin and the
+-- extension is dropped on install.
+local function asset_name(plat)
+  return ("go-asm.%s.%s"):format(plat, plat:match("^windows") and "exe" or "bin")
+end
+
+-- local_name is what the server is called once installed.
+local function local_name()
+  return "go-asm" .. (is_windows() and ".exe" or "")
 end
 
 -- binary resolves the server: an explicit override, then PATH, then the
@@ -47,9 +59,9 @@ end
 function M.binary()
   if M.cmd and vim.fn.executable(M.cmd) == 1 then return M.cmd end
   if vim.fn.executable("go-asm") == 1 then return "go-asm" end
-  local candidates = { exe(vim.fs.joinpath(install_dir(), "go-asm")) }
+  local candidates = { vim.fs.joinpath(install_dir(), local_name()) }
   for _, dir in ipairs({ "~/.local/bin", "~/bin", "~/go/bin" }) do
-    candidates[#candidates + 1] = exe(vim.fn.expand(dir .. "/go-asm"))
+    candidates[#candidates + 1] = vim.fn.expand(dir .. "/" .. local_name())
   end
   for _, path in ipairs(candidates) do
     if vim.fn.executable(path) == 1 then return path end
@@ -71,11 +83,11 @@ function M.install(tag)
     vim.notify("go-asm: curl is required to install", vim.log.levels.ERROR)
     return
   end
-  local asset = exe("go-asm-" .. plat)
+  local asset = asset_name(plat)
   local url = tag
       and ("https://github.com/%s/releases/download/%s/%s"):format(M.repo, tag, asset)
       or ("https://github.com/%s/releases/latest/download/%s"):format(M.repo, asset)
-  local dest = exe(vim.fs.joinpath(install_dir(), "go-asm"))
+  local dest = vim.fs.joinpath(install_dir(), local_name())
   vim.fn.mkdir(install_dir(), "p")
   vim.notify("go-asm: downloading " .. asset .. "…")
   -- -f so an HTML 404 page is never written over the binary.
