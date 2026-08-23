@@ -160,8 +160,10 @@ Beyond standard LSP, the server implements custom requests: `asm/run` and
 
 ## License
 
-This plugin is MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
 
-The `go-asm` server is distributed as a binary. It is also MIT-licensed and
-derives from Fabrice Bellard's TinyEMU; the applicable copyright notices ship
-as `LICENSE.txt` alongside each release asset.
+The `go-asm` server ships as a binary under the same terms. It is original
+work, apart from its RISC-V core and parts of its memory subsystem, which are
+inherited from [tinyemu-go](https://github.com/jtolio) and ultimately from
+Fabrice Bellard's TinyEMU, also MIT. Full notices ship as `LICENSE.txt` with
+each release asset.
