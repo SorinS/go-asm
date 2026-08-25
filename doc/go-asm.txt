@@ -66,7 +66,10 @@ Set on the buffer when the server attaches; nothing is bound globally.
 Run: ~
     <leader>rr      Run the buffer.
     <leader>rc      Run to the cursor line.
-    <leader>rg      Registers, in a float. Toggles.
+    <leader>rg      Toggle the registers panel — a vertical split on the
+                    right showing the full register file. It refreshes after
+                    every run and every step, so it can be left open while
+                    stepping. `q` closes it from inside.
     <leader>rx      Toggle the inline overlay.
     K               Hover: encoded bytes and operand forms.
 
@@ -82,7 +85,7 @@ Debug: ~
                     e.g. "rcx == 0". Repeat on the same line to remove.
     <leader>rm      Memory dump; prompts for a register name or 0xADDR.
 
-Floats close on q, <Esc>, or cursor movement.
+The memory dump is a float: it closes on q, <Esc>, or cursor movement.
 
 ==============================================================================
 4. CONFIGURATION                                              *go-asm-config*

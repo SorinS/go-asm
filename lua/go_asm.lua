@@ -25,7 +25,7 @@ M.repo = "SorinS/go-asm"
 -- fetches exactly this by default: the client and server share custom methods
 -- (asm/run, asm/debug/*), so an arbitrary pairing is not safe. Pass "latest"
 -- or an explicit tag to override.
-M.version = "v0.5.0"
+M.version = "v0.6.0"
 
 -- install_dir is where :GoAsmInstall drops the binary — under nvim's data dir,
 -- so it survives plugin reinstalls and needs no privileges or PATH edits.
@@ -185,6 +185,73 @@ local function float_open(kind, lines)
 end
 
 -- ---------------------------------------------------------------------------
+-- Registers side panel
+-- ---------------------------------------------------------------------------
+-- A persistent vertical split rather than a float: registers are something you
+-- watch *while* stepping, and a float that closes on cursor movement cannot do
+-- that. The panel refreshes from whichever buffer produced the last result.
+local reg = { win = nil, buf = nil }
+
+local function reg_visible()
+  return reg.win ~= nil and vim.api.nvim_win_is_valid(reg.win)
+end
+
+local function reg_close()
+  if reg_visible() then vim.api.nvim_win_close(reg.win, true) end
+  reg.win = nil
+end
+
+-- reg_text renders the register file, or a hint when nothing has run yet — the
+-- panel can be opened before the first run and fills in when one happens.
+local function reg_text(res)
+  local regs = res and (res.final or res.regs)
+  if not regs then
+    return { "registers", "", "  <leader>rr  run", "  <leader>rs  step" }
+  end
+  local lines = { ("registers — %s%d"):format(res.arch or "?", res.bits or 0), "" }
+  for _, r in ipairs(regs) do
+    local isFP = r.name:match("^f[tsa]") ~= nil
+    if not isFP or (r.hex and r.hex ~= "0x0") then -- all GPRs + non-zero FP regs
+      local extra = r.float and ("  = " .. r.float) or ""
+      lines[#lines + 1] = ("%-5s %-18s%s"):format(r.name, r.hex or "?", extra)
+    end
+  end
+  return lines
+end
+
+local function reg_fill(res)
+  if not (reg.buf and vim.api.nvim_buf_is_valid(reg.buf)) then return end
+  vim.bo[reg.buf].modifiable = true
+  vim.api.nvim_buf_set_lines(reg.buf, 0, -1, false, reg_text(res))
+  vim.bo[reg.buf].modifiable = false
+end
+
+-- reg_refresh is called after every run and step so the panel never shows stale
+-- state; it is a no-op when the panel is closed.
+local function reg_refresh(bufnr)
+  if reg_visible() then reg_fill(vim.b[bufnr].asm_last) end
+end
+
+local function reg_show(bufnr)
+  if not (reg.buf and vim.api.nvim_buf_is_valid(reg.buf)) then
+    reg.buf = vim.api.nvim_create_buf(false, true)
+    vim.bo[reg.buf].buftype = "nofile"
+    vim.bo[reg.buf].swapfile = false
+    vim.bo[reg.buf].filetype = "go-asm-registers"
+    vim.keymap.set("n", "q", reg_close, { buffer = reg.buf, nowait = true })
+  end
+  reg_fill(vim.b[bufnr].asm_last)
+  -- win = -1 splits the tabpage, giving a full-height sidebar; enter = false
+  -- leaves the cursor in the source buffer.
+  reg.win = vim.api.nvim_open_win(reg.buf, false, { split = "right", win = -1, width = 36 })
+  vim.wo[reg.win].number = false
+  vim.wo[reg.win].relativenumber = false
+  vim.wo[reg.win].signcolumn = "no"
+  vim.wo[reg.win].wrap = false
+  vim.wo[reg.win].winfixwidth = true
+end
+
+-- ---------------------------------------------------------------------------
 -- Live run (one-shot)
 -- ---------------------------------------------------------------------------
 local render_debug -- forward declaration (defined in the debugger section)
@@ -193,6 +260,7 @@ local function render(bufnr, result)
   clear(bufnr)
   vim.b[bufnr].asm_last = result
   vim.b[bufnr].asm_render = "run"
+  reg_refresh(bufnr)
   local lastLine = -1
   for _, line in ipairs(result.lines or {}) do
     if line.line > lastLine then lastLine = line.line end
@@ -262,24 +330,14 @@ function M.clear()
   end
 end
 
--- registers: float with the full register file from the last run (`final`) or
--- the current debug step (`regs`).
+-- registers toggles the side panel showing the full register file from the last
+-- run (`final`) or the current debug step (`regs`).
 function M.registers()
-  local res = vim.b[vim.api.nvim_get_current_buf()].asm_last
-  local regs = res and (res.final or res.regs)
-  if not regs then
-    vim.notify("go-asm: run (<leader>rr) or step (<leader>rs) first", vim.log.levels.WARN)
+  if reg_visible() then
+    reg_close()
     return
   end
-  local lines = { ("registers — %s%d  (q/Esc/move to close)"):format(res.arch or "?", res.bits or 0) }
-  for _, r in ipairs(regs) do
-    local isFP = r.name:match("^f[tsa]") ~= nil
-    if not isFP or (r.hex and r.hex ~= "0x0") then -- show all GPRs + non-zero FP regs
-      local extra = r.float and ("  = " .. r.float) or ""
-      lines[#lines + 1] = ("  %-5s %-18s%s"):format(r.name, r.hex or "?", extra)
-    end
-  end
-  float_open("reg", lines)
+  reg_show(vim.api.nvim_get_current_buf())
 end
 
 -- ---------------------------------------------------------------------------
@@ -346,6 +404,7 @@ render_debug = function(bufnr, st)
   clear(bufnr)
   vim.b[bufnr].asm_last = st
   vim.b[bufnr].asm_render = "debug"
+  reg_refresh(bufnr)
   if st.stop == "assemble-error" then
     vim.notify("go-asm debug: " .. (st.error or "assemble error"), vim.log.levels.ERROR)
     return

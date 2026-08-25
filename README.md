@@ -81,7 +81,7 @@ Set on the buffer when the server attaches — no global bindings.
 |---|---|---|---|---|
 | `<leader>rr` | run buffer | | `<leader>rs` | step |
 | `<leader>rc` | run to cursor | | `<leader>ro` | step over |
-| `<leader>rg` | registers (float) | | `<leader>rS` | step back |
+| `<leader>rg` | registers panel (toggle) | | `<leader>rS` | step back |
 | `<leader>rx` | toggle overlay | | `<leader>rR` | restart |
 | `K` | hover — bytes + decode | | `<leader>rn` | continue |
 | | | | `<leader>rq` | quit debug |
@@ -107,7 +107,7 @@ The plugin and the server are released together under one tag, and the plugin
 pins the server build it was written against:
 
 ```lua
-require("go_asm").version  --> "v0.5.0"
+require("go_asm").version  --> "v0.6.0"
 ```
 
 `:GoAsmInstall` fetches exactly that. Client and server share custom LSP
@@ -121,7 +121,7 @@ run a different server, `:GoAsmInstall latest` or `:GoAsmInstall <tag>`.
 The server reports its own build too:
 
 ```sh
-go-asm --version    # go-asm v0.5.0 (abc1234)
+go-asm --version    # go-asm v0.6.0 (abc1234)
 ```
 
 ## Configuration
