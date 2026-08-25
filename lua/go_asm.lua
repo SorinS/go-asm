@@ -201,12 +201,22 @@ local function reg_close()
   reg.win = nil
 end
 
--- reg_text renders the register file, or a hint when nothing has run yet — the
--- panel can be opened before the first run and fills in when one happens.
+-- reg_text renders the register file, or an explanation when nothing has run
+-- yet. The empty state has to say what the panel is *for*: a bare list of key
+-- hints here reads like the register listing itself, which is the opposite of
+-- what it means.
 local function reg_text(res)
   local regs = res and (res.final or res.regs)
   if not regs then
-    return { "registers", "", "  <leader>rr  run", "  <leader>rs  step" }
+    return {
+      "registers — nothing run yet",
+      "",
+      "Shows the CPU registers once",
+      "the program has run.",
+      "",
+      "  <leader>rr  run",
+      "  <leader>rs  step",
+    }
   end
   local lines = { ("registers — %s%d"):format(res.arch or "?", res.bits or 0), "" }
   for _, r in ipairs(regs) do
