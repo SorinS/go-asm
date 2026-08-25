@@ -35,11 +35,17 @@ needs no `sudo` and no `PATH` changes.
 ```lua
 {
   "SorinS/go-asm",
-  ft = { "asm", "nasm" },
+  lazy = false,
   build = ":GoAsmInstall",
   config = function() require("go_asm") end,
 }
 ```
+
+Loading eagerly is deliberate. `require("go_asm")` only registers two autocommands
+and two commands — no server starts until you open an `.asm` file — while
+lazy-loading on `ft` would leave `:GoAsmInstall`, `:GoAsmInfo` and
+`:checkhealth go_asm` undefined until then, which is precisely when you need
+them if something is wrong.
 
 ### packer.nvim
 
@@ -101,7 +107,7 @@ The plugin and the server are released together under one tag, and the plugin
 pins the server build it was written against:
 
 ```lua
-require("go_asm").version  --> "v0.4.0"
+require("go_asm").version  --> "v0.5.0"
 ```
 
 `:GoAsmInstall` fetches exactly that. Client and server share custom LSP
@@ -115,7 +121,7 @@ run a different server, `:GoAsmInstall latest` or `:GoAsmInstall <tag>`.
 The server reports its own build too:
 
 ```sh
-go-asm --version    # go-asm v0.4.0 (abc1234)
+go-asm --version    # go-asm v0.5.0 (abc1234)
 ```
 
 ## Configuration

@@ -26,11 +26,15 @@ With lazy.nvim: >lua
 
     {
       "SorinS/go-asm",
-      ft = { "asm", "nasm" },
+      lazy = false,
       build = ":GoAsmInstall",
       config = function() require("go_asm") end,
     }
 <
+Loading eagerly is deliberate: require("go_asm") only registers autocommands
+and commands — no server starts until an .asm file is opened — whereas
+lazy-loading on ft leaves |:GoAsmInstall| and `:checkhealth go_asm` undefined
+until then, which is exactly when they are needed.
 The server is a prebuilt binary published on GitHub Releases. |:GoAsmInstall|
 downloads the build for your platform into `stdpath("data")/go-asm/bin` — no
 sudo, no PATH changes, no Go toolchain.
