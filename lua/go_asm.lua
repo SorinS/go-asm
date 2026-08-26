@@ -25,7 +25,7 @@ M.repo = "SorinS/go-asm"
 -- fetches exactly this by default: the client and server share custom methods
 -- (asm/run, asm/debug/*), so an arbitrary pairing is not safe. Pass "latest"
 -- or an explicit tag to override.
-M.version = "v0.7.0"
+M.version = "v0.8.0"
 
 -- install_dir is where :GoAsmInstall drops the binary — under nvim's data dir,
 -- so it survives plugin reinstalls and needs no privileges or PATH edits.
@@ -140,12 +140,21 @@ local function clear(bufnr)
   vim.api.nvim_buf_clear_namespace(bufnr or 0, ns, 0, -1)
 end
 
+-- arr normalises a JSON array that the server may send as null. Neovim decodes
+-- JSON null to vim.NIL, which is *truthy*, so the usual `x or {}` does not
+-- guard it — ipairs then throws "table expected, got userdata". The server
+-- sends null for `lines` and `final` when a program fails to assemble.
+local function arr(v)
+  if v == nil or v == vim.NIL then return {} end
+  return v
+end
+
 -- nonzero renders the non-zero registers of a list, using the exact hex string
 -- the server sends (JSON numbers lose precision above 2^53) and the float
 -- interpretation for FP registers.
 local function nonzero(regs)
   local parts = {}
-  for _, r in ipairs(regs or {}) do
+  for _, r in ipairs(arr(regs)) do
     if r.hex and r.hex ~= "0x0" then
       parts[#parts + 1] = ("%s=%s"):format(r.name, r.float or r.hex)
     end
@@ -213,7 +222,8 @@ end
 -- what it means.
 local function reg_text(res)
   local regs = res and (res.final or res.regs)
-  if not regs then
+  if regs == vim.NIL then regs = nil end
+  if not regs or #regs == 0 then
     return {
       "registers — nothing run yet",
       "",
@@ -272,7 +282,7 @@ end
 -- display, and a trailing newline is dropped — it is the normal way to end
 -- output and an empty final line would just look like a bug.
 local function output_lines(out)
-  if not out or out == "" then return nil end
+  if not out or out == vim.NIL or out == "" then return nil end
   out = out:gsub("\n$", "")
   local lines = {}
   for _, l in ipairs(vim.split(out, "\n", { plain = true })) do
@@ -293,7 +303,7 @@ local function render(bufnr, result)
   vim.b[bufnr].asm_render = "run"
   reg_refresh(bufnr)
   local lastLine = -1
-  for _, line in ipairs(result.lines or {}) do
+  for _, line in ipairs(arr(result.lines)) do
     if line.line > lastLine then lastLine = line.line end
     if line.text and line.text ~= "" then
       vim.api.nvim_buf_set_extmark(bufnr, ns, line.line, 0, {
@@ -536,7 +546,7 @@ local function resolve_addr(bufnr, s)
   if n then return n end
   local res = vim.b[bufnr].asm_last
   for _, key in ipairs({ "regs", "final" }) do
-    for _, r in ipairs((res or {})[key] or {}) do
+    for _, r in ipairs(arr((res or {})[key])) do
       if r.name == s then return r.value end
     end
   end
@@ -569,7 +579,7 @@ function M.memory()
           return
         end
         local lines = { ("memory @ 0x%x  (q/Esc/move to close)"):format(res.addr) }
-        local bytes = res.bytes or {}
+        local bytes = arr(res.bytes)
         for row = 0, #bytes - 1, 16 do
           local hex, asc = "", ""
           for i = 0, 15 do
@@ -612,8 +622,8 @@ if not vim.g.go_asm_loaded then
   vim.api.nvim_create_user_command("GoAsmInfo", function()
     local bin = M.binary()
     local have = M.server_version()
-    vim.notify(("go-asm: %s\nserver:   %s (expected %s)\nplatform: %s\nrepo:     %s"):format(
-      bin or "NOT FOUND (run :GoAsmInstall)", have or "unknown", M.version,
+    vim.notify(("plugin:   %s\nserver:   %s\nbinary:   %s\nplatform: %s\nrepo:     %s"):format(
+      M.version, have or "unknown", bin or "NOT FOUND (run :GoAsmInstall)",
       M.platform() or "unsupported", M.repo))
   end, { desc = "Show the resolved go-asm binary, version and platform" })
 

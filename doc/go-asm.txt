@@ -12,12 +12,93 @@ Requires Neovim 0.11+ and, for |:GoAsmInstall|, curl.
 ==============================================================================
 CONTENTS                                                    *go-asm-contents*
 
+    0. Syntax .................................. |go-asm-syntax|
     1. Install ................................. |go-asm-install|
     2. Commands ................................ |go-asm-commands|
     3. Mappings ................................ |go-asm-mappings|
     4. Configuration ........................... |go-asm-config|
        Versioning .............................. |go-asm-versioning|
     5. Troubleshooting ......................... |go-asm-troubleshooting|
+
+==============================================================================
+0. SYNTAX                                                     *go-asm-syntax*
+
+go-asm follows NASM conventions — NASM/Intel syntax, not GNU as or MASM. The
+assembler is checked against nasm's own output.
+
+    comments        ; like this        (not #, //, or /* */)
+    address of msg  mov rsi, msg
+    contents of msg mov al, [msg]      (MASM would write "mov al, msg")
+    operand order   mov dst, src       (not AT&T's src, dst)
+    registers       rax, eax           (not %rax)
+    immediates      5  0x1f  1Fh  1010b  17o      (not $5)
+    sized memory    mov byte [x], 1    (not movb)
+
+Square brackets mean dereference; their absence means the address. That
+explicitness is the main difference from MASM.
+
+db/dw/dd/dq, labels with or without a colon, section, global, extern and
+BITS 32 work as nasm defines them. `equ` and `$` are not implemented yet.
+
+What is supported ~
+Verified against the assembler, not aspirational.
+
+  directives    BITS 32/64, section, segment, global, extern, default, cpu
+                not yet: org, equ, times, align, incbin
+
+  data          db dw dd dq (strings in ' or ", commas and semicolons inside
+                them), resb resw resd resq
+                not yet: dt do dy dz, backtick strings with \n escapes
+
+  labels        "msg:" or colonless "msg db 1", local labels (.loop), forward
+                references. A bare label is its address; [msg] and [rel msg]
+                are its contents.
+                not yet: $ and $$
+
+  registers     rax..r15 in every width (r8d/r8w/r8b), high-byte ah/ch,
+                spl/bpl/sil/dil
+                not yet: segment registers, xmm/ymm/zmm
+
+  memory        [reg], [reg+disp], [base+index*scale+disp], [label],
+                [rel label], byte/word/dword/qword ("ptr" accepted and
+                ignored), 32-bit addressing under BITS 32
+
+  immediates    5, 0x1f, 1Fh, 0b101, 101b, 0o17, 17o, negatives
+                not yet: 'h' character literals, expressions (2+3), "strict"
+
+  instructions  data movement, arithmetic, logic, jmp/jcc (short and near, as
+                nasm chooses), the loop family, call/ret, push/pop, setcc,
+                cmovcc, imul (including nasm's "imul reg, imm" shorthand),
+                movzx/movsx, mul/div, shifts, bsf/bt, cpuid, hlt, syscall,
+                int, rep/lock prefixes
+
+                Encoding is checked against nasm itself: a sweep assembles
+                every general-purpose form in nasm's table and compares
+                bytes, currently matching 86.8%. The shortfall is almost all
+                APX/EVEX/VEX/XOP, not classic instructions.
+
+  preprocessor  not implemented: %define, %macro, %assign, %if, %include
+
+An instruction the encoder does not reach yet is reported as a hint rather
+than an error, so a coverage gap never paints working code red.
+
+File extensions ~
+The plugin attaches on the `asm` and `nasm` filetypes, which cover .asm,
+.nasm, .s and .S — there is no extension list to configure. Note that .S
+conventionally means GNU as source: such a file attaches and is then flagged
+line by line ("unknown instruction: .text"), because the dialect differs.
+GNU as directives are not implemented on any target, and on x86 neither is
+AT&T syntax.
+
+Comment characters follow each target's own convention:
+
+    x86 / x86-64    ;
+    RISC-V          #  ;
+    ARM64           // #(leading) ;
+
+Programs may use Linux syscalls: write, exit and read are emulated through
+both the x86-64 `syscall` gate and the 32-bit `int 0x80` gate, and anything
+written to stdout appears inline under the program.
 
 ==============================================================================
 1. INSTALL                                                   *go-asm-install*

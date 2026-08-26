@@ -14,6 +14,114 @@ auto-detected per buffer.
 - **Live run** — execute the buffer, see per-line effects and final registers.
 - **Stepping debugger** — step / step-over / step-back, breakpoints, conditional
   breakpoints, memory dump.
+- **Runs Linux programs** — `write`, `exit` and `read` are emulated through both
+  the x86-64 `syscall` gate and the 32-bit `int 0x80` one, so a hand-written
+  hello-world prints its output inline.
+
+## Syntax
+
+**go-asm follows NASM conventions.** Source is NASM/Intel syntax, not GNU as or
+MASM, and the assembler is checked against nasm's own output.
+
+The distinctions that catch people out:
+
+| | NASM (what go-asm expects) | Not this |
+|---|---|---|
+| Comments | `; comment` | `# …`, `// …`, `/* … */` (GNU as / C) |
+| Address of a label | `mov rsi, msg` | — |
+| Contents at a label | `mov al, [msg]` | MASM's bare `mov al, msg` |
+| Operand order | `mov dst, src` | AT&T's `mov src, dst` |
+| Registers | `rax`, `eax` | AT&T's `%rax` |
+| Immediates | `5`, `0x1f`, `1Fh`, `1010b`, `17o` | AT&T's `$5` |
+| Sized memory | `mov byte [x], 1` | `movb` suffixes |
+
+Square brackets mean dereference, and their absence means the address — the
+explicitness is deliberate, and it is the main difference from MASM.
+
+Data definitions (`db`/`dw`/`dd`/`dq`), labels with or without a colon,
+`section`, `global`, `extern` and `BITS 32` all work as nasm defines them.
+`equ` and `$` are not implemented yet.
+
+### What is supported
+
+Everything below is verified against the assembler, not aspirational.
+
+**Directives**
+
+| Supported | Not yet |
+|---|---|
+| `BITS 32` / `BITS 64` | `org` |
+| `section` / `segment` | `equ` |
+| `global`, `extern` | `times` |
+| `default`, `cpu` | `align`, `incbin` |
+
+**Data and labels**
+
+- `db` `dw` `dd` `dq`, including strings in single or double quotes, with commas
+  and semicolons inside them (`db "hello, world", 10`)
+- `resb` `resw` `resd` `resq`
+- Labels with a colon (`msg:`) or without (`msg db 1`), local labels (`.loop`),
+  and forward references
+- A bare label is its address (`mov rsi, msg`); `[msg]` and `[rel msg]` are its
+  contents
+- Not yet: `dt`/`do`/`dy`/`dz`, and backtick strings with `\n` escapes
+
+**Operands**
+
+- Registers: `rax`–`r15` in all widths (`r8d`, `r8w`, `r8b`), high-byte `ah`/`ch`,
+  and `spl`/`bpl`/`sil`/`dil`
+- Memory: `[reg]`, `[reg+disp]`, `[base+index*scale+disp]`, `[label]`,
+  `[rel label]`, size keywords `byte`/`word`/`dword`/`qword` (`ptr` is accepted
+  and ignored), and 32-bit addressing under `BITS 32`
+- Immediates: `5`, `0x1f`, `1Fh`, `0b101`, `101b`, `0o17`, `17o`, negatives
+- Not yet: segment registers, SSE/AVX registers (`xmm`/`ymm`/`zmm`), character
+  literals (`'h'`), expressions (`2+3`), `$` and `$$`, the `strict` keyword
+
+**Instructions**
+
+Data movement, arithmetic and logic, `jmp`/`jcc` (short and near, chosen the way
+nasm chooses), the `loop` family, `call`/`ret`, `push`/`pop`, `setcc`, `cmovcc`,
+`imul` in all its forms including nasm's `imul reg, imm` shorthand,
+`movzx`/`movsx`, `mul`/`div`, shifts, `bsf`/`bt`, `cpuid`, `hlt`, `syscall`,
+`int`, and the `rep`/`lock` prefixes.
+
+Encoding is checked against nasm itself: a sweep assembles every general-purpose
+form in nasm's table and compares bytes, currently matching on **86.8%** of
+them. The shortfall is almost entirely APX/EVEX/VEX/XOP — recent vector and
+extension encodings — rather than classic instructions.
+
+**Preprocessor** — not implemented at all. `%define`, `%macro`, `%assign`,
+`%if`, `%include` are all rejected.
+
+An instruction the encoder does not reach yet is reported as a *hint* rather
+than an error, so a coverage gap never paints working code red.
+
+### File extensions
+
+The plugin attaches on Neovim's `asm` and `nasm` filetypes, which between them
+cover `.asm`, `.nasm`, `.s` and `.S` — there is no extension list to configure.
+
+Attaching is not the same as understanding, though. `.S` conventionally means
+**GNU as** source, a different dialect, so such a file attaches and is then
+flagged line by line:
+
+```
+line 1: unknown instruction: /*
+line 4: unknown instruction: .text
+line 5: unknown instruction: .globl
+```
+
+That is the dialect being wrong, not the file being broken. GNU as directives
+(`.text`, `.globl`, `.byte`, `.asciz`, …) are not implemented on any target,
+and on x86 neither is AT&T syntax — `%rax`, reversed operands, `movb` suffixes.
+
+Comment characters, however, do follow each target's own convention:
+
+| Target | Comments accepted |
+|---|---|
+| x86 / x86-64 | `;` |
+| RISC-V | `#`, `;` |
+| ARM64 | `//`, leading `#`, `;` |
 
 ## Requirements
 
@@ -107,7 +215,7 @@ The plugin and the server are released together under one tag, and the plugin
 pins the server build it was written against:
 
 ```lua
-require("go_asm").version  --> "v0.7.0"
+require("go_asm").version  --> "v0.8.0"
 ```
 
 `:GoAsmInstall` fetches exactly that. Client and server share custom LSP
@@ -121,7 +229,7 @@ run a different server, `:GoAsmInstall latest` or `:GoAsmInstall <tag>`.
 The server reports its own build too:
 
 ```sh
-go-asm --version    # go-asm v0.7.0 (abc1234)
+go-asm --version    # go-asm v0.8.0 (abc1234)
 ```
 
 ## Configuration
