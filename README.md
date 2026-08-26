@@ -107,7 +107,7 @@ The plugin and the server are released together under one tag, and the plugin
 pins the server build it was written against:
 
 ```lua
-require("go_asm").version  --> "v0.6.0"
+require("go_asm").version  --> "v0.7.0"
 ```
 
 `:GoAsmInstall` fetches exactly that. Client and server share custom LSP
@@ -121,7 +121,7 @@ run a different server, `:GoAsmInstall latest` or `:GoAsmInstall <tag>`.
 The server reports its own build too:
 
 ```sh
-go-asm --version    # go-asm v0.6.0 (abc1234)
+go-asm --version    # go-asm v0.7.0 (abc1234)
 ```
 
 ## Configuration

@@ -25,7 +25,7 @@ M.repo = "SorinS/go-asm"
 -- fetches exactly this by default: the client and server share custom methods
 -- (asm/run, asm/debug/*), so an arbitrary pairing is not safe. Pass "latest"
 -- or an explicit tag to override.
-M.version = "v0.6.0"
+M.version = "v0.7.0"
 
 -- install_dir is where :GoAsmInstall drops the binary — under nvim's data dir,
 -- so it survives plugin reinstalls and needs no privileges or PATH edits.
@@ -111,8 +111,14 @@ function M.install(tag)
   local dest = vim.fs.joinpath(install_dir(), local_name())
   vim.fn.mkdir(install_dir(), "p")
   vim.notify(("go-asm: downloading %s (%s)…"):format(asset, tag))
-  -- -f so an HTML 404 page is never written over the binary.
-  vim.system({ "curl", "-fsSL", "--retry", "2", "-o", dest, url }, { text = true }, function(res)
+  -- -f so an HTML 404 page is never written over the binary. --retry-connrefused
+  -- because a plain --retry ignores a refused connection; --connect-timeout so a
+  -- black-holed network fails instead of hanging on "downloading…"; and the
+  -- speed guard to abort a connection that opens and then stalls — under 1 KB/s
+  -- for 30s is dead, but the threshold is low enough not to punish a slow link.
+  vim.system({ "curl", "-fsSL", "--retry", "3", "--retry-connrefused",
+    "--connect-timeout", "10", "--speed-time", "30", "--speed-limit", "1000",
+    "-o", dest, url }, { text = true }, function(res)
     vim.schedule(function()
       if res.code ~= 0 then
         vim.fn.delete(dest)
@@ -261,6 +267,21 @@ local function reg_show(bufnr)
   vim.wo[reg.win].winfixwidth = true
 end
 
+-- output_lines renders what the program wrote via the syscall shim as virtual
+-- lines. Control characters are escaped so a stray \r or \t cannot corrupt the
+-- display, and a trailing newline is dropped — it is the normal way to end
+-- output and an empty final line would just look like a bug.
+local function output_lines(out)
+  if not out or out == "" then return nil end
+  out = out:gsub("\n$", "")
+  local lines = {}
+  for _, l in ipairs(vim.split(out, "\n", { plain = true })) do
+    l = l:gsub("%c", function(c) return ("\\x%02x"):format(c:byte()) end)
+    lines[#lines + 1] = { { "  stdout │ ", "Comment" }, { l, "String" } }
+  end
+  return lines
+end
+
 -- ---------------------------------------------------------------------------
 -- Live run (one-shot)
 -- ---------------------------------------------------------------------------
@@ -284,10 +305,13 @@ local function render(bufnr, result)
       virt_text = { { "  ◀ cursor", "DiagnosticHint" } }, virt_text_pos = "eol" })
   end
   if lastLine >= 0 then
+    local virt = output_lines(result.output) or {}
     local fin = nonzero(result.final)
     if fin ~= "" then
-      vim.api.nvim_buf_set_extmark(bufnr, ns, lastLine, 0,
-        { virt_lines = { { { "  ⇒ " .. fin, "String" } } } })
+      virt[#virt + 1] = { { "  ⇒ " .. fin, "String" } }
+    end
+    if #virt > 0 then
+      vim.api.nvim_buf_set_extmark(bufnr, ns, lastLine, 0, { virt_lines = virt })
     end
   end
   local lvl = vim.log.levels.INFO
@@ -297,6 +321,9 @@ local function render(bufnr, result)
     lvl = vim.log.levels.WARN
   end
   local msg = ("asm[%s%d]: %s (%d steps)"):format(result.arch or "?", result.bits or 0, result.stop or "?", result.steps or 0)
+  if result.stop == "exited" then
+    msg = msg .. (" — exit %d"):format(result.exitCode or 0)
+  end
   if result.error and result.error ~= "" then msg = msg .. " — " .. result.error end
   vim.notify(msg, lvl)
 end
@@ -427,19 +454,27 @@ render_debug = function(bufnr, st)
       virt_text = { { "  ▶ step " .. (st.steps or 0), "DiagnosticInfo" } },
       virt_text_pos = "eol",
     })
+    -- st.output is everything written so far, not just this step, so the
+    -- panel shows the program's output accumulating as you step.
+    local virt = output_lines(st.output) or {}
     local regs = nonzero(st.regs)
     if regs ~= "" then
-      vim.api.nvim_buf_set_extmark(bufnr, ns, st.line, 0,
-        { virt_lines = { { { "    " .. regs, "Comment" } } } })
+      virt[#virt + 1] = { { "    " .. regs, "Comment" } }
+    end
+    if #virt > 0 then
+      vim.api.nvim_buf_set_extmark(bufnr, ns, st.line, 0, { virt_lines = virt })
     end
     pcall(vim.api.nvim_win_set_cursor, 0, { st.line + 1, 0 })
   else
     anchor = dbg_line[bufnr]
     if anchor then
+      local virt = output_lines(st.output) or {}
       local regs = nonzero(st.regs)
       if regs ~= "" then
-        vim.api.nvim_buf_set_extmark(bufnr, ns, anchor, 0,
-          { virt_lines = { { { "  ⇒ " .. regs, "String" } } } })
+        virt[#virt + 1] = { { "  ⇒ " .. regs, "String" } }
+      end
+      if #virt > 0 then
+        vim.api.nvim_buf_set_extmark(bufnr, ns, anchor, 0, { virt_lines = virt })
       end
     end
   end
