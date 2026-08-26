@@ -27,6 +27,11 @@ M.repo = "SorinS/go-asm"
 -- or an explicit tag to override.
 M.version = "v0.8.0"
 
+-- max_steps bounds a run so a non-terminating program cannot hang the editor.
+-- nil uses the server's default (1,000,000 — about 1.4s for a program that
+-- never ends). Raise it for something genuinely long-running.
+M.max_steps = nil
+
 -- install_dir is where :GoAsmInstall drops the binary — under nvim's data dir,
 -- so it survives plugin reinstalls and needs no privileges or PATH edits.
 local function install_dir()
@@ -297,6 +302,15 @@ end
 -- ---------------------------------------------------------------------------
 local render_debug -- forward declaration (defined in the debugger section)
 
+-- in_buf reports whether a 0-based line index exists in the buffer. Every line
+-- the server sends is checked: an extmark on a line that is not there raises a
+-- hard error from nvim_buf_set_extmark, taking down the whole render, and the
+-- buffer can legitimately be shorter than the result if it was edited while the
+-- request was in flight.
+local function in_buf(bufnr, line)
+  return type(line) == "number" and line >= 0 and line < vim.api.nvim_buf_line_count(bufnr)
+end
+
 local function render(bufnr, result)
   clear(bufnr)
   vim.b[bufnr].asm_last = result
@@ -304,17 +318,19 @@ local function render(bufnr, result)
   reg_refresh(bufnr)
   local lastLine = -1
   for _, line in ipairs(arr(result.lines)) do
-    if line.line > lastLine then lastLine = line.line end
-    if line.text and line.text ~= "" then
-      vim.api.nvim_buf_set_extmark(bufnr, ns, line.line, 0, {
-        virt_text = { { "  " .. line.text, "Comment" } }, virt_text_pos = "eol" })
+    if in_buf(bufnr, line.line) then
+      if line.line > lastLine then lastLine = line.line end
+      if line.text and line.text ~= "" then
+        vim.api.nvim_buf_set_extmark(bufnr, ns, line.line, 0, {
+          virt_text = { { "  " .. line.text, "Comment" } }, virt_text_pos = "eol" })
+      end
     end
   end
-  if result.stop == "reached-line" and result.stopLine and result.stopLine >= 0 then
+  if result.stop == "reached-line" and in_buf(bufnr, result.stopLine) then
     vim.api.nvim_buf_set_extmark(bufnr, ns, result.stopLine, 0, {
       virt_text = { { "  ◀ cursor", "DiagnosticHint" } }, virt_text_pos = "eol" })
   end
-  if lastLine >= 0 then
+  if in_buf(bufnr, lastLine) then
     local virt = output_lines(result.output) or {}
     local fin = nonzero(result.final)
     if fin ~= "" then
@@ -345,7 +361,8 @@ local function run(line)
     vim.notify("go-asm: no client attached to this buffer", vim.log.levels.ERROR)
     return
   end
-  client:request("asm/run", { textDocument = { uri = vim.uri_from_bufnr(bufnr) }, line = line },
+  client:request("asm/run",
+    { textDocument = { uri = vim.uri_from_bufnr(bufnr) }, line = line, maxSteps = M.max_steps },
     function(err, result)
       if err then
         vim.notify("asm/run: " .. vim.inspect(err), vim.log.levels.ERROR)
@@ -457,7 +474,7 @@ render_debug = function(bufnr, st)
     return
   end
   local anchor = st.line
-  if st.line and st.line >= 0 then
+  if in_buf(bufnr, st.line) then
     dbg_line[bufnr] = st.line
     vim.api.nvim_buf_set_extmark(bufnr, ns, st.line, 0, {
       line_hl_group = "Visual",
@@ -477,7 +494,7 @@ render_debug = function(bufnr, st)
     pcall(vim.api.nvim_win_set_cursor, 0, { st.line + 1, 0 })
   else
     anchor = dbg_line[bufnr]
-    if anchor then
+    if in_buf(bufnr, anchor) then
       local virt = output_lines(st.output) or {}
       local regs = nonzero(st.regs)
       if regs ~= "" then

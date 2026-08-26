@@ -51,9 +51,30 @@ Everything below is verified against the assembler, not aspirational.
 | Supported | Not yet |
 |---|---|
 | `BITS 32` / `BITS 64` | `org` |
-| `section` / `segment` | `equ` |
-| `global`, `extern` | `times` |
-| `default`, `cpu` | `align`, `incbin` |
+| `section` / `segment` | `times` |
+| `global`, `extern` | `align` |
+| `default`, `cpu` | `incbin` |
+| `equ`, including `equ $-msg` | |
+
+**Preprocessor**
+
+Object-like `%define` only — `%define N 5`, then `N` anywhere afterwards.
+Substitution is whole-word and skips string literals, so a macro named `N`
+neither rewrites `COUNT` nor the `N` in `db 'N'`. The directive itself is
+case-insensitive (`%DEFINE`), as in nasm; macro names are not.
+
+Function-like `%define f(a)`, `%macro`, `%assign`, `%if` and `%include` are not
+implemented, and say so rather than failing as a bad operand.
+
+**Expressions**
+
+Full constant expressions: `+ - * / % << >> & | ^ ~` and parentheses, over
+literals, symbols, character constants (`'A'`), `$` (here) and `$$` (section
+start).
+
+Values track whether they relocate, following nasm: an address moves with the
+load address, `end-start` is a length and does not, and adding two addresses is
+an error rather than nonsense.
 
 **Data and labels**
 
@@ -74,8 +95,8 @@ Everything below is verified against the assembler, not aspirational.
   `[rel label]`, size keywords `byte`/`word`/`dword`/`qword` (`ptr` is accepted
   and ignored), and 32-bit addressing under `BITS 32`
 - Immediates: `5`, `0x1f`, `1Fh`, `0b101`, `101b`, `0o17`, `17o`, negatives
-- Not yet: segment registers, SSE/AVX registers (`xmm`/`ymm`/`zmm`), character
-  literals (`'h'`), expressions (`2+3`), `$` and `$$`, the `strict` keyword
+- Not yet: segment registers, SSE/AVX registers (`xmm`/`ymm`/`zmm`), the
+  `strict` keyword
 
 **Instructions**
 
@@ -90,8 +111,17 @@ form in nasm's table and compares bytes, currently matching on **86.8%** of
 them. The shortfall is almost entirely APX/EVEX/VEX/XOP — recent vector and
 extension encodings — rather than classic instructions.
 
-**Preprocessor** — not implemented at all. `%define`, `%macro`, `%assign`,
-`%if`, `%include` are all rejected.
+**Running programs**
+
+Linux syscalls are emulated through both the x86-64 `syscall` gate and the
+32-bit `int 0x80` gate: `write`, `exit` and `read`. Output appears inline under
+the program as you run or step.
+
+A small set of libc entry points is stubbed for `extern` declarations —
+`printf`, `puts`, `putchar`, `exit` — covering `%d %i %u %x %X %o %c %s %p %%`,
+in both the SysV register convention and 32-bit cdecl. There is no linker: these
+are emulated, not linked, and the set is deliberately output-only. Nothing
+allocates, reads input, or manipulates strings.
 
 An instruction the encoder does not reach yet is reported as a *hint* rather
 than an error, so a coverage gap never paints working code red.

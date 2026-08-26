@@ -43,8 +43,22 @@ BITS 32 work as nasm defines them. `equ` and `$` are not implemented yet.
 What is supported ~
 Verified against the assembler, not aspirational.
 
-  directives    BITS 32/64, section, segment, global, extern, default, cpu
-                not yet: org, equ, times, align, incbin
+  directives    BITS 32/64, section, segment, global, extern, default, cpu,
+                equ (including "equ $-msg")
+                not yet: org, times, align, incbin
+
+  preprocessor  object-like %define only. Substitution is whole-word and skips
+                string literals, so a macro named N rewrites neither COUNT nor
+                the N in "db 'N'". The directive is case-insensitive (%DEFINE),
+                as in nasm; macro names are not.
+                not yet: %define f(a), %macro, %assign, %if, %include — each
+                reports itself rather than failing as a bad operand
+
+  expressions   + - * / % << >> & | ^ ~ and parentheses, over literals,
+                symbols, character constants ('A'), $ (here) and $$ (section
+                start). Values track relocatability as nasm does: an address
+                moves with the load address, "end-start" is a length and does
+                not, and adding two addresses is an error.
 
   data          db dw dd dq (strings in ' or ", commas and semicolons inside
                 them), resb resw resd resq
@@ -53,7 +67,6 @@ Verified against the assembler, not aspirational.
   labels        "msg:" or colonless "msg db 1", local labels (.loop), forward
                 references. A bare label is its address; [msg] and [rel msg]
                 are its contents.
-                not yet: $ and $$
 
   registers     rax..r15 in every width (r8d/r8w/r8b), high-byte ah/ch,
                 spl/bpl/sil/dil
@@ -64,7 +77,7 @@ Verified against the assembler, not aspirational.
                 ignored), 32-bit addressing under BITS 32
 
   immediates    5, 0x1f, 1Fh, 0b101, 101b, 0o17, 17o, negatives
-                not yet: 'h' character literals, expressions (2+3), "strict"
+                not yet: the "strict" keyword
 
   instructions  data movement, arithmetic, logic, jmp/jcc (short and near, as
                 nasm chooses), the loop family, call/ret, push/pop, setcc,
@@ -77,7 +90,16 @@ Verified against the assembler, not aspirational.
                 bytes, currently matching 86.8%. The shortfall is almost all
                 APX/EVEX/VEX/XOP, not classic instructions.
 
-  preprocessor  not implemented: %define, %macro, %assign, %if, %include
+  running       Linux syscalls through both the x86-64 "syscall" gate and the
+                32-bit "int 0x80" gate: write, exit, read. Output appears
+                inline under the program as you run or step.
+
+                A small set of libc entry points is stubbed for "extern" —
+                printf, puts, putchar, exit — covering %d %i %u %x %X %o %c
+                %s %p %%, in both the SysV register convention and 32-bit
+                cdecl. There is no linker: these are emulated, and the set is
+                deliberately output-only. Nothing allocates, reads input, or
+                manipulates strings.
 
 An instruction the encoder does not reach yet is reported as a hint rather
 than an error, so a coverage gap never paints working code red.
