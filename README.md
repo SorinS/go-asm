@@ -52,9 +52,14 @@ Everything below is verified against the assembler, not aspirational.
 |---|---|
 | `BITS 32` / `BITS 64` | `org` |
 | `section` / `segment` | `times` |
-| `global`, `extern` | `align` |
-| `default`, `cpu` | `incbin` |
+| `global`, `extern` | `incbin` |
+| `align`, `alignb` | |
+| `cpu`, `default abs` | |
 | `equ`, including `equ $-msg` | |
+
+`default rel` and `BITS 16` are **refused, not ignored** — each changes how the
+whole program is encoded, so accepting them quietly would produce code that
+does not do what it says. See [Where this differs from nasm](#where-this-differs-from-nasm).
 
 **Preprocessor**
 
@@ -125,6 +130,38 @@ allocates, reads input, or manipulates strings.
 
 An instruction the encoder does not reach yet is reported as a *hint* rather
 than an error, so a coverage gap never paints working code red.
+
+### Where this differs from nasm
+
+Two differences are deliberate rather than gaps, and both are worth knowing
+because the code assembles either way.
+
+**Sections are not reordered.** nasm groups output by section — `.text`, then
+`.data`, then `.bss` — whatever order they appear in the source. go-asm emits
+in source order, because it produces one flat image for the emulator to load
+rather than an object file for a linker. So a program that writes `.data` first
+gets different addresses here than nasm would give it:
+
+```asm
+section .data
+msg:    db "hi", 0
+section .text
+        mov rsi, msg
+```
+
+nasm places the code at offset 0 and `msg` after it; go-asm places `msg` at 0
+and the code after. The program still runs correctly — `global main` (or a
+`main`/`_start` label) sets the entry point, so execution starts in the right
+place rather than in your string constants — but the addresses are not the ones
+nasm would produce.
+
+**`mov reg, label` may encode shorter.** nasm loads a relocatable address with
+the 10-byte `mov r64, imm64` form because it cannot assume the address fits in
+32 bits. go-asm knows the final address and uses the 5-byte `imm32` form when it
+fits. Same value in the register, fewer bytes.
+
+Neither affects whether a program behaves correctly here. Both mean the byte
+stream is not always identical to `nasm -f bin`.
 
 ### File extensions
 
