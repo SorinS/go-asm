@@ -25,7 +25,7 @@ M.repo = "SorinS/go-asm"
 -- fetches exactly this by default: the client and server share custom methods
 -- (asm/run, asm/debug/*), so an arbitrary pairing is not safe. Pass "latest"
 -- or an explicit tag to override.
-M.version = "v0.8.0"
+M.version = "v0.9.0"
 
 -- max_steps bounds a run so a non-terminating program cannot hang the editor.
 -- nil uses the server's default (1,000,000 — about 1.4s for a program that
@@ -225,12 +225,22 @@ end
 -- yet. The empty state has to say what the panel is *for*: a bare list of key
 -- hints here reads like the register listing itself, which is the opposite of
 -- what it means.
-local function reg_text(res)
+-- reg_name is the buffer's filename, for the panel header. There is one panel
+-- for all buffers and it follows whichever last ran, so without a name it can
+-- silently show another file's registers.
+local function reg_name(bufnr)
+  local n = bufnr and vim.api.nvim_buf_is_valid(bufnr)
+      and vim.api.nvim_buf_get_name(bufnr) or ""
+  return n ~= "" and vim.fn.fnamemodify(n, ":t") or "[no name]"
+end
+
+local function reg_text(res, name)
   local regs = res and (res.final or res.regs)
   if regs == vim.NIL then regs = nil end
   if not regs or #regs == 0 then
     return {
       "registers — nothing run yet",
+      (" %s"):format(name or "?"),
       "",
       "Shows the CPU registers once",
       "the program has run.",
@@ -239,7 +249,11 @@ local function reg_text(res)
       "  <leader>rs  step",
     }
   end
-  local lines = { ("registers — %s%d"):format(res.arch or "?", res.bits or 0), "" }
+  local lines = {
+    ("registers — %s%d"):format(res.arch or "?", res.bits or 0),
+    (" %s"):format(name or "?"),
+    "",
+  }
   for _, r in ipairs(regs) do
     local isFP = r.name:match("^f[tsa]") ~= nil
     if not isFP or (r.hex and r.hex ~= "0x0") then -- all GPRs + non-zero FP regs
@@ -250,17 +264,17 @@ local function reg_text(res)
   return lines
 end
 
-local function reg_fill(res)
+local function reg_fill(res, name)
   if not (reg.buf and vim.api.nvim_buf_is_valid(reg.buf)) then return end
   vim.bo[reg.buf].modifiable = true
-  vim.api.nvim_buf_set_lines(reg.buf, 0, -1, false, reg_text(res))
+  vim.api.nvim_buf_set_lines(reg.buf, 0, -1, false, reg_text(res, name))
   vim.bo[reg.buf].modifiable = false
 end
 
 -- reg_refresh is called after every run and step so the panel never shows stale
 -- state; it is a no-op when the panel is closed.
 local function reg_refresh(bufnr)
-  if reg_visible() then reg_fill(vim.b[bufnr].asm_last) end
+  if reg_visible() then reg_fill(vim.b[bufnr].asm_last, reg_name(bufnr)) end
 end
 
 local function reg_show(bufnr)
@@ -271,7 +285,7 @@ local function reg_show(bufnr)
     vim.bo[reg.buf].filetype = "go-asm-registers"
     vim.keymap.set("n", "q", reg_close, { buffer = reg.buf, nowait = true })
   end
-  reg_fill(vim.b[bufnr].asm_last)
+  reg_fill(vim.b[bufnr].asm_last, reg_name(bufnr))
   -- win = -1 splits the tabpage, giving a full-height sidebar; enter = false
   -- leaves the cursor in the source buffer.
   reg.win = vim.api.nvim_open_win(reg.buf, false, { split = "right", win = -1, width = 36 })
