@@ -64,20 +64,53 @@ local function local_name()
   return "go-asm" .. (is_windows() and ".exe" or "")
 end
 
--- binary resolves the server: an explicit override, then PATH, then the
--- :GoAsmInstall location, then the usual manual-install dirs. A GUI-launched
--- nvim inherits no shell PATH, so the absolute fallbacks matter.
+-- binary resolves the server: an explicit override, then the :GoAsmInstall
+-- location, then PATH and the usual manual-install dirs.
+--
+-- The installed copy outranks PATH deliberately. The plugin fetches a server
+-- matching the release it pins, and letting an unrelated go-asm on PATH shadow
+-- it produces a mismatched pair whose symptom is asm/* requests behaving oddly
+-- rather than anything that looks like a version problem. PATH still resolves
+-- the server for anyone who has not run :GoAsmInstall — on a platform with no
+-- published build, say — and go_asm.cmd remains the way to choose deliberately.
+--
+-- A GUI-launched nvim inherits no shell PATH, so the absolute fallbacks matter.
 function M.binary()
   if M.cmd and vim.fn.executable(M.cmd) == 1 then return M.cmd end
+  local installed = vim.fs.joinpath(install_dir(), local_name())
+  if vim.fn.executable(installed) == 1 then return installed end
   if vim.fn.executable("go-asm") == 1 then return "go-asm" end
-  local candidates = { vim.fs.joinpath(install_dir(), local_name()) }
   for _, dir in ipairs({ "~/.local/bin", "~/bin", "~/go/bin" }) do
-    candidates[#candidates + 1] = vim.fn.expand(dir .. "/" .. local_name())
-  end
-  for _, path in ipairs(candidates) do
+    local path = vim.fn.expand(dir .. "/" .. local_name())
     if vim.fn.executable(path) == 1 then return path end
   end
   return nil
+end
+
+-- warned_mismatch keeps the check below to once per session: it is a
+-- configuration problem, not a per-buffer one, and repeating it on every file
+-- would train people to ignore it.
+local warned_mismatch = false
+
+-- warn_if_mismatched compares the server that actually attached against the
+-- release this client expects.
+--
+-- Both can be legitimately present — a go-asm on PATH (installed deliberately,
+-- perhaps system-wide) takes precedence over the one :GoAsmInstall fetched, and
+-- that precedence is deliberate. But when the two disagree it is invisible: the
+-- symptom is asm/* requests behaving oddly, not anything that looks like a
+-- version problem. So say it once, and name the file, because the whole
+-- difficulty is knowing which binary is being run.
+local function warn_if_mismatched(client)
+  if warned_mismatch then return end
+  local info = client and client.server_info
+  local have = info and info.version
+  if not have or have == M.version then return end
+  warned_mismatch = true
+  vim.notify(([[go-asm: server is %s but this plugin expects %s
+  running: %s
+  Run :GoAsmInstall to match, or set require("go_asm").cmd to choose deliberately.]])
+    :format(have, M.version, tostring(M.binary())), vim.log.levels.WARN)
 end
 
 -- server_version runs the resolved binary's --version. Returns nil when the
@@ -662,6 +695,7 @@ if not vim.g.go_asm_loaded then
     callback = function(args)
       local c = vim.lsp.get_client_by_id(args.data.client_id)
       if c and c.name == "go-asm" then
+        warn_if_mismatched(c)
         local function map(lhs, fn, desc)
           vim.keymap.set("n", lhs, fn, { buffer = args.buf, desc = desc })
         end

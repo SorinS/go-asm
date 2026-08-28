@@ -312,10 +312,33 @@ go_asm.repo    = "you/your-fork"    -- install from a fork's releases
 go_asm.version = "v0.1.0"           -- pin a different server release
 ```
 
-The binary is resolved in this order: `go_asm.cmd` → `PATH` →
-`stdpath("data")/go-asm/bin` → `~/.local/bin` → `~/bin` → `~/go/bin`. The
-absolute fallbacks matter because a GUI-launched Neovim inherits no shell
-`PATH`.
+### Which server binary is used
+
+Resolved in this order:
+
+1. `go_asm.cmd` — an explicit choice, always wins
+2. `stdpath("data")/go-asm/bin` — what `:GoAsmInstall` fetched
+3. `PATH`
+4. `~/.local/bin`, `~/bin`, `~/go/bin`
+
+**The installed copy outranks `PATH` deliberately.** The plugin fetches a server
+matching the release it pins, and an unrelated `go-asm` earlier on `PATH` would
+shadow it — producing a mismatched pair whose symptom is `asm/*` requests
+behaving oddly rather than anything that looks like a version problem. `PATH`
+still resolves the server for anyone who has not run `:GoAsmInstall`, and
+`go_asm.cmd` is the way to choose a specific build on purpose:
+
+```lua
+require("go_asm").cmd = vim.fn.expand("~/src/tinyemu-go/bin/go-asm")
+```
+
+The absolute fallbacks matter because a GUI-launched Neovim inherits no shell
+`PATH` at all.
+
+If the server that attaches reports a different version from the one this plugin
+expects, it says so once per session and names the file it is running — that
+mismatch is otherwise invisible until something misbehaves. `:GoAsmInfo` shows
+the same information on demand, and `:checkhealth go_asm` checks it too.
 
 To rebind, map to the module functions directly — `require("go_asm").run()`,
 `.run_to_cursor()`, `.registers()`, `.clear()`, `.dbg_step()`, `.dbg_stepover()`,

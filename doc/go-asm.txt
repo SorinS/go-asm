@@ -234,9 +234,21 @@ an obvious version error — `:checkhealth go_asm` compares them and warns.
 Update both together: your plugin manager, then |:GoAsmInstall|.
 
                                                           *go-asm-resolution*
-The binary is resolved in order: `go_asm.cmd`, PATH, `stdpath("data")`'s
-go-asm/bin, ~/.local/bin, ~/bin, ~/go/bin. The absolute fallbacks matter
-because a GUI-launched Neovim inherits no shell PATH.
+The binary is resolved in order:
+
+    1. go_asm.cmd                      an explicit choice, always wins
+    2. stdpath("data")/go-asm/bin      what :GoAsmInstall fetched
+    3. PATH
+    4. ~/.local/bin, ~/bin, ~/go/bin
+
+The installed copy outranks PATH deliberately: the plugin fetches a server
+matching the release it pins, and an unrelated go-asm earlier on PATH would
+shadow it, giving a mismatched pair whose symptom is asm/* requests behaving
+oddly rather than anything that looks like a version problem. The absolute
+fallbacks matter because a GUI-launched Neovim inherits no shell PATH.
+
+If the attached server reports a different version from the one this plugin
+expects, it says so once per session and names the file it is running.
 
 To rebind, map the module functions directly: >lua
 
