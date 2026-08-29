@@ -179,6 +179,27 @@ windows-amd64.
                     release, or a tag like "v0.1.0" for a specific one. Safe
                     to re-run; it overwrites the existing binary.
 
+                                                                  *:GoAsmRun*
+:GoAsmRun [args]    Run the buffer, passing args to the program as its command
+                    line. argv[0] is the file name, so ":GoAsmRun 5 10" gives
+                    the program an argc of 3.
+
+                    Where the arguments arrive depends on the entry point, as
+                    it does on a real system: a program entered at _start
+                    finds argc on top of the stack and the argv pointers above
+                    it; one entered at main takes argc and argv in rdi/rsi, or
+                    above the return address in 32-bit.
+
+                    With no args the stack is left untouched, which is not the
+                    same as an empty command line: a program that pops argc
+                    sees exactly what it saw before. The <leader>rr
+                    mapping always runs this way.
+
+                                                                *:GoAsmDebug*
+:GoAsmDebug [args]  Start a debug session with those arguments, replacing any
+                    session on the buffer. Stepping, continuing and restarting
+                    reuse them; only starting a new session can change them.
+
                                                                  *:GoAsmInfo*
 :GoAsmInfo          Show the resolved binary path, its version, the detected
                     platform and the release repo.

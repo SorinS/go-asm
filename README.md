@@ -266,6 +266,25 @@ Set on the buffer when the server attaches — no global bindings.
 
 A conditional breakpoint prompts for `<reg> <op> <value>`, e.g. `rcx == 0`.
 
+### Command-line arguments
+
+The keymaps run a program with no command line. To give it one, use the
+commands, which take the arguments directly:
+
+```vim
+:GoAsmRun 5 10
+:GoAsmDebug 5 10
+```
+
+`argv[0]` is the file name, so `:GoAsmRun 5 10` makes `argc` 3. Where the
+arguments arrive depends on the entry point, matching what a real system does:
+a program entered at `_start` finds `argc` on top of the stack with the `argv`
+pointers above it, while one entered at `main` was called and takes `argc` and
+`argv` in `rdi`/`rsi` (or above the return address in 32-bit).
+
+Running without arguments is not the same as running with none: the stack is
+left untouched, so a program that pops `argc` sees what it always did.
+
 ## Commands
 
 | Command | Description |
@@ -273,6 +292,8 @@ A conditional breakpoint prompts for `<reg> <op> <value>`, e.g. `rcx == 0`.
 | `:GoAsmInstall` | Download the server version this plugin expects |
 | `:GoAsmInstall latest` | Download the newest release instead |
 | `:GoAsmInstall v0.1.0` | Download a specific release |
+| `:GoAsmRun [args...]` | Run the buffer, passing the arguments to the program |
+| `:GoAsmDebug [args...]` | Start a debug session with those arguments |
 | `:GoAsmInfo` | Show the resolved binary, its version and the platform |
 | `:checkhealth go_asm` | Diagnose install and version problems |
 

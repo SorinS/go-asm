@@ -401,15 +401,19 @@ local function render(bufnr, result)
   vim.notify(msg, lvl)
 end
 
-local function run(line)
+-- args is the program's command line, or nil for none. An empty table is not
+-- the same thing and must not be sent: the server distinguishes "no command
+-- line" (the guest stack is left exactly as it was) from "an empty one".
+local function run(line, args)
   local bufnr = vim.api.nvim_get_current_buf()
   local client = client_for(bufnr)
   if not client then
     vim.notify("go-asm: no client attached to this buffer", vim.log.levels.ERROR)
     return
   end
-  client:request("asm/run",
-    { textDocument = { uri = vim.uri_from_bufnr(bufnr) }, line = line, maxSteps = M.max_steps },
+  local params = { textDocument = { uri = vim.uri_from_bufnr(bufnr) }, line = line, maxSteps = M.max_steps }
+  if args and #args > 0 then params.args = args end
+  client:request("asm/run", params,
     function(err, result)
       if err then
         vim.notify("asm/run: " .. vim.inspect(err), vim.log.levels.ERROR)
@@ -419,8 +423,8 @@ local function run(line)
     end, bufnr)
 end
 
-function M.run() run(-1) end
-function M.run_to_cursor() run(vim.api.nvim_win_get_cursor(0)[1] - 1) end
+function M.run(args) run(-1, args) end
+function M.run_to_cursor(args) run(vim.api.nvim_win_get_cursor(0)[1] - 1, args) end
 
 -- clear toggles the overlay: hide it if shown, restore the last run/step if
 -- hidden. (Stepping or running redraws it regardless.)
@@ -557,6 +561,7 @@ render_debug = function(bufnr, st)
   vim.notify(("debug[%s%d]: %s (step %d)"):format(st.arch or "?", st.bits or 0, tail, st.steps or 0), lvl)
 end
 
+-- as in run(): only send args when there are some.
 local function dbg(method, extra)
   local bufnr = vim.api.nvim_get_current_buf()
   local client = client_for(bufnr)
@@ -579,6 +584,14 @@ function M.dbg_step() dbg("asm/debug/step") end
 function M.dbg_stepover() dbg("asm/debug/stepover") end
 function M.dbg_stepback() dbg("asm/debug/stepback") end
 function M.dbg_restart() dbg("asm/debug/restart") end
+
+-- dbg_start arms a fresh session, which is the only place a command line can
+-- be given: stepping, continuing and restarting all reuse the session's.
+function M.dbg_start(args)
+  local extra = {}
+  if args and #args > 0 then extra.args = args end
+  dbg("asm/debug/start", extra)
+end
 
 function M.dbg_continue()
   local bufnr = vim.api.nvim_get_current_buf()
@@ -683,6 +696,12 @@ if not vim.g.go_asm_loaded then
   vim.api.nvim_create_user_command("GoAsmInstall", function(o)
     M.install(o.args ~= "" and o.args or nil)
   end, { nargs = "?", desc = "Download the go-asm server ([tag] | latest)" })
+  vim.api.nvim_create_user_command("GoAsmRun", function(o)
+    M.run(o.fargs)
+  end, { nargs = "*", desc = "Run the buffer, passing any arguments to the program" })
+  vim.api.nvim_create_user_command("GoAsmDebug", function(o)
+    M.dbg_start(o.fargs)
+  end, { nargs = "*", desc = "Start a debug session, passing any arguments to the program" })
   vim.api.nvim_create_user_command("GoAsmInfo", function()
     local bin = M.binary()
     local have = M.server_version()
@@ -700,8 +719,8 @@ if not vim.g.go_asm_loaded then
           vim.keymap.set("n", lhs, fn, { buffer = args.buf, desc = desc })
         end
         -- run
-        map("<leader>rr", M.run, "asm: run buffer")
-        map("<leader>rc", M.run_to_cursor, "asm: run to cursor")
+        map("<leader>rr", function() M.run() end, "asm: run buffer")
+        map("<leader>rc", function() M.run_to_cursor() end, "asm: run to cursor")
         map("<leader>rg", M.registers, "asm: registers")
         map("<leader>rx", M.clear, "asm: clear overlay")
         -- debug
