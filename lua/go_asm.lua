@@ -693,15 +693,27 @@ if not vim.g.go_asm_loaded then
     end,
   })
 
+  -- normal(fn): run fn after leaving insert/replace mode, so a go-asm command
+  -- fired from an editing mode lands you read-only (normal mode) rather than
+  -- typing into the buffer the overlay sits on. stopinsert is deferred to the
+  -- main loop, but every command here sends an async request or draws an
+  -- overlay, so what the user sees afterwards — normal mode — is the point.
+  local function normal(fn)
+    return function(...)
+      if vim.fn.mode():match("^[iR]") then vim.cmd("stopinsert") end
+      return fn(...)
+    end
+  end
+
   vim.api.nvim_create_user_command("GoAsmInstall", function(o)
     M.install(o.args ~= "" and o.args or nil)
   end, { nargs = "?", desc = "Download the go-asm server ([tag] | latest)" })
-  vim.api.nvim_create_user_command("GoAsmRun", function(o)
+  vim.api.nvim_create_user_command("GoAsmRun", normal(function(o)
     M.run(o.fargs)
-  end, { nargs = "*", desc = "Run the buffer, passing any arguments to the program" })
-  vim.api.nvim_create_user_command("GoAsmDebug", function(o)
+  end), { nargs = "*", desc = "Run the buffer, passing any arguments to the program" })
+  vim.api.nvim_create_user_command("GoAsmDebug", normal(function(o)
     M.dbg_start(o.fargs)
-  end, { nargs = "*", desc = "Start a debug session, passing any arguments to the program" })
+  end), { nargs = "*", desc = "Start a debug session, passing any arguments to the program" })
   vim.api.nvim_create_user_command("GoAsmInfo", function()
     local bin = M.binary()
     local have = M.server_version()
@@ -716,7 +728,7 @@ if not vim.g.go_asm_loaded then
       if c and c.name == "go-asm" then
         warn_if_mismatched(c)
         local function map(lhs, fn, desc)
-          vim.keymap.set("n", lhs, fn, { buffer = args.buf, desc = desc })
+          vim.keymap.set("n", lhs, normal(fn), { buffer = args.buf, desc = desc })
         end
         -- run
         map("<leader>rr", function() M.run() end, "asm: run buffer")
