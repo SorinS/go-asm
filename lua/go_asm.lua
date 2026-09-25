@@ -25,7 +25,7 @@ M.repo = "SorinS/go-asm"
 -- fetches exactly this by default: the client and server share custom methods
 -- (asm/run, asm/debug/*), so an arbitrary pairing is not safe. Pass "latest"
 -- or an explicit tag to override.
-M.version = "v0.11.0"
+M.version = "v0.12.0"
 
 -- max_steps bounds a run so a non-terminating program cannot hang the editor.
 -- nil uses the server's default (1,000,000 — about 1.4s for a program that
