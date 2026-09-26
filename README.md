@@ -248,6 +248,32 @@ Then run `:GoAsmInstall` once.
 
 Open any `.asm` file and press `<leader>rr`.
 
+## Updating
+
+Updating is two steps, because pulling the new files is not the same as loading
+them:
+
+```vim
+:Lazy update go-asm     " packer: :PackerSync · manual: git pull in the clone
+```
+
+Then **restart Neovim.** `:Lazy update` changes the files on disk, but the
+`go_asm` module loaded at startup stays in memory for the rest of the session —
+so its pinned server version, commands and keymaps are still the old ones until
+you reopen nvim.
+
+From the fresh session, match the server to the new plugin:
+
+```vim
+:GoAsmInstall           " fetch the server build this version pins
+:GoAsmInfo              " confirm the plugin and server report the same version
+```
+
+Order matters: `:GoAsmInstall` reads the pin from the loaded module, so running
+it *before* restarting re-fetches the **old** server, and the plugin and server
+then disagree — a mismatch `:checkhealth go_asm` will flag. The plugin and server
+are released together (see [Versioning](#versioning)), so always move both.
+
 ## Keymaps
 
 Set on the buffer when the server attaches — no global bindings.
@@ -303,7 +329,7 @@ The plugin and the server are released together under one tag, and the plugin
 pins the server build it was written against:
 
 ```lua
-require("go_asm").version  --> "v0.11.0"
+require("go_asm").version  --> "v0.12.0"
 ```
 
 `:GoAsmInstall` fetches exactly that. Client and server share custom LSP
@@ -317,7 +343,7 @@ run a different server, `:GoAsmInstall latest` or `:GoAsmInstall <tag>`.
 The server reports its own build too:
 
 ```sh
-go-asm --version    # go-asm v0.11.0 (abc1234)
+go-asm --version    # go-asm v0.12.0 (abc1234)
 ```
 
 ## Configuration
